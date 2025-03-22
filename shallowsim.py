@@ -779,6 +779,7 @@ def decode_time_with_ep_list(args: ModelArgs, gpu_dict,
              'COMM_SUM', 'Delta', 'TPOT', 'TPOT_O', 'TPS', 'TPS_O', 'Total',
              'Total_O', 'Comm_Impact']
     dd = dd[order]
+    dd['BatchSize'] = dd['BatchSize'].astype(int)
     return dd
 
 
@@ -794,9 +795,10 @@ def df_filter(df,gpu,device_num=0, bs=0,tps_limit=0, value_list=[]):
         df_o = df_o[value_list]
     return df_o
 
-def df_filter2(df, gpu, bs, value_list):
-    df1 = df[(df['GPU'] == gpu) & (df['BatchSize'] == str(bs))][value_list]
+def df_filter2(df, gpu, comp_name, comp_val, value_list):
+    df1 = df[(df['GPU'] == gpu) & (df[comp_name] == comp_val)][value_list]
     return df1
+
 def df_sort(df,value,ascending=False):
     if ascending:
         df_o = df.groupby(['GPU','BatchSize','EP'],as_index=False).apply(lambda t: t[t[value]==t[value].min()]).sort_values([value],ascending=True).reset_index(drop=True)
@@ -837,28 +839,28 @@ def highlight_max(data, color='yellow'):
                             index=data.index, columns=data.columns)
 
 
-
-def draw(df, gpu_dict, val, val_unit_name):
+def draw(df, gpu_dict,comp_name,comp_val_list, val_list, val_unit_name,width=8, height=4):
+    sns.color_palette("Paired")
     num_gpu = len(gpu_dict)
-    height = 4 * num_gpu
-    fig, axs = plt.subplots(nrows=num_gpu, ncols=1, figsize=(9, height))
-    ax12 = axs[0]
-    ax22 = axs[1]
+    fig_height = height * num_gpu
+    fig_width = width * len(val_list)
+    fig, axs = plt.subplots(nrows=num_gpu, ncols=len(val_list), figsize=(fig_width, fig_height))
 
     # fig.suptitle(title, y=0.97,fontsize='large')
-    value_list = [val, 'Seq_len']
+    value_list = val_list + ['index_value']
     cnt = 0
     for key in gpu_dict.keys():
         axt = axs[cnt]
-        df1 = df_filter2(df, key, 32, value_list)
-        df2 = df_filter2(df, key, 128, value_list)
-        sns.lineplot(x='Seq_len', y=val, data=df1, color="deepskyblue", ax=axt)
-        sns.lineplot(x='Seq_len', y=val, data=df2, color="#698339", ax=axt)
-        axt.set_ylabel(val_unit_name)
-        axt.set_xlabel(key)
+        for comp_v in comp_val_list:
+            df1 = df_filter2(df, key , comp_name, comp_v, value_list)
+            for i in range(0,len(val_list)):
+                sns.lineplot(x='index_value', y=val_list[i], data=df1,  ax=axt[i])
+                axt[i].legend(comp_val_list)
+                axt[i].set_ylabel(val_unit_name)
+                axt[i].set_xlabel(key+'('+val_list[i]+')')
         cnt += 1
 
     plt.subplots_adjust(left=None, bottom=None, right=None,
-                        top=None, wspace=0.3, hspace=0.3)
+                        top=None, wspace=0.2, hspace=0.2)
     # plt.savefig(title.replace(' ','_')+'.png',bbox_inches='tight', pad_inches=0.05)
     plt.show()
