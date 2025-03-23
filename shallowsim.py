@@ -10,7 +10,7 @@ import seaborn as sns
 from typing import Tuple, Optional, Literal
 
 cm = sns.light_palette("red", as_cmap=True)
-
+NVL_GPU_LIST = [72, 144, 576]
 
 class ModelArgs:
     max_batch_size: int = 8
@@ -128,6 +128,14 @@ def get_gpu_info(filename='./device/gpuinfo.csv',
         if (len(device_list) == 0) | (key in device_list):
             gpu_dict[key] = gpu
     return gpu_dict
+
+def gpu_category_idx(gpu_dict):
+    gpu_category={}
+    i = 0
+    for key in gpu_dict.keys():
+        gpu_category[key]=i
+        i +=1
+    return gpu_category
 
 # 非吸收的版本
 
@@ -561,7 +569,10 @@ def _decode_moe_expert(args: ModelArgs, gpu: GPU_perf, bs,
         1024: 0.7,
         2048: 0.7,
         4096: 0.7,
-        8192: 0.7
+        8192: 0.7,
+        16384: 0.7,
+        32768: 0.7,
+        65536: 0.7
     }
 
     # H20 exception based on hs's result
@@ -580,7 +591,10 @@ def _decode_moe_expert(args: ModelArgs, gpu: GPU_perf, bs,
         1024: 1.0,
         2048: 1.0,
         4096: 1.0,
-        8192: 1.0
+        8192: 1.0,
+        16384: 1.0,
+        32768: 1.0,
+        65536: 1.0
     }
 
     gpu_flops = gpu_flops * flops_discounts[n_pow2_range(int(m_per_group))]
@@ -638,9 +652,9 @@ def _moe_a2a(args: ModelArgs, gpu: GPU_perf, bs, expert_num, device_num, fp8_com
         # single host deployment
         if args.n_routed_experts / (expert_num - 1) == gpu.gpu_per_node:
             comm_bw = gpu.get_nvlink_bw()
-    #NVL72 
-    elif (gpu.gpu_per_node == 72) & ( device_num > gpu.gpu_per_node):
-       comm_bw = gpu.get_pcie_bw()
+    #NVL72 /144 / 576
+    elif (gpu.gpu_per_node in NVL_GPU_LIST) & (device_num >  gpu.gpu_per_node):
+            comm_bw = gpu.get_pcie_bw()
     else:
         comm_bw = gpu.get_nvlink_bw()
 
@@ -795,9 +809,7 @@ def df_filter(df,gpu,device_num=0, bs=0,tps_limit=0, value_list=[]):
         df_o = df_o[value_list]
     return df_o
 
-def df_filter2(df, gpu, comp_name, comp_val, value_list):
-    df1 = df[(df['GPU'] == gpu) & (df[comp_name] == comp_val)][value_list]
-    return df1
+
 
 def df_sort(df,value,ascending=False):
     if ascending:
@@ -824,6 +836,12 @@ def color_positive_red(val):
     color = 'red' if val > 0 else 'black'
     return 'color: %s' % color
 
+def gpu_category_color(s,props):
+    colors = ['color:darkred','color:steelblue','color:green','color:black','color:m',
+              'color:darkgoldenrod','color:darkgreen','color:crimson','color:brwon','color:sienna',
+              'color:navy']
+    gpu_idx = props[s]
+    return colors[gpu_idx]
 
 def highlight_max(data, color='yellow'):
     '''
@@ -839,20 +857,29 @@ def highlight_max(data, color='yellow'):
                             index=data.index, columns=data.columns)
 
 
-def draw(df, gpu_dict,comp_name,comp_val_list, val_list, val_unit_name,width=8, height=4):
+
+def draw(df, gpu_dict,
+         comp_name,comp_val_list, 
+         val_list, val_unit_name,
+         title, width=8, height=4,
+         filename='',savefig=False):
+    def _df_filter(df, gpu, comp_name, comp_val, value_list):
+        df1 = df[(df['GPU'] == gpu) & (df[comp_name] == comp_val)][value_list]
+        return df1
+    
     sns.color_palette("Paired")
     num_gpu = len(gpu_dict)
     fig_height = height * num_gpu
     fig_width = width * len(val_list)
     fig, axs = plt.subplots(nrows=num_gpu, ncols=len(val_list), figsize=(fig_width, fig_height))
 
-    # fig.suptitle(title, y=0.97,fontsize='large')
+    fig.suptitle(title, y=0.9,fontsize='large')
     value_list = val_list + ['index_value']
     cnt = 0
     for key in gpu_dict.keys():
         axt = axs[cnt]
         for comp_v in comp_val_list:
-            df1 = df_filter2(df, key , comp_name, comp_v, value_list)
+            df1 = _df_filter(df, key , comp_name, comp_v, value_list)
             for i in range(0,len(val_list)):
                 sns.lineplot(x='index_value', y=val_list[i], data=df1,  ax=axt[i])
                 axt[i].legend(comp_val_list)
@@ -862,5 +889,8 @@ def draw(df, gpu_dict,comp_name,comp_val_list, val_list, val_unit_name,width=8, 
 
     plt.subplots_adjust(left=None, bottom=None, right=None,
                         top=None, wspace=0.2, hspace=0.2)
-    # plt.savefig(title.replace(' ','_')+'.png',bbox_inches='tight', pad_inches=0.05)
+    if savefig:
+        if filename=="":
+            filename = './figures/'+title.replace(' ','_')+'.png'
+        plt.savefig(filename,bbox_inches='tight', pad_inches=0.05)
     plt.show()
