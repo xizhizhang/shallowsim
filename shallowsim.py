@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 import pandas as pd
+import numpy as np
 import copy as copy
 from functools import reduce
 import matplotlib.pyplot as plt
@@ -813,9 +814,11 @@ def df_filter(df,gpu,device_num=0, bs=0,tps_limit=0, value_list=[]):
 
 def df_sort(df,value,ascending=False):
     if ascending:
-        df_o = df.groupby(['GPU','BatchSize','EP'],as_index=False).apply(lambda t: t[t[value]==t[value].min()]).sort_values([value],ascending=True).reset_index(drop=True)
+        df_o = df.groupby(['GPU','BatchSize','EP'],as_index=False)\
+            .apply(lambda t: t[t[value]==t[value].min()]).sort_values([value],ascending=True).reset_index(drop=True)
     else:
-        df_o = df.groupby(['GPU','BatchSize','EP'],as_index=False).apply(lambda t: t[t[value]==t[value].max()]).sort_values([value],ascending=False).reset_index(drop=True)
+        df_o = df.groupby(['GPU','BatchSize','EP'],as_index=False)\
+            .apply(lambda t: t[t[value]==t[value].max()]).sort_values([value],ascending=False).reset_index(drop=True)
     return df_o
 
 def color_negative_red(val):
@@ -839,7 +842,7 @@ def color_positive_red(val):
 def gpu_category_color(s,props):
     colors = ['color:darkred','color:steelblue','color:green','color:black','color:m',
               'color:darkgoldenrod','color:darkgreen','color:crimson','color:brwon','color:sienna',
-              'color:navy']
+              'color:navy','color:pink','color:gray','color:darkviolet']
     gpu_idx = props[s]
     return colors[gpu_idx]
 
@@ -878,11 +881,12 @@ def draw(df, gpu_dict,
     cnt = 0
     for key in gpu_dict.keys():
         axt = axs[cnt]
+        for i in range(0,len(val_list)):
+            axt[i].legend(comp_val_list)
         for comp_v in comp_val_list:
             df1 = _df_filter(df, key , comp_name, comp_v, value_list)
             for i in range(0,len(val_list)):
-                sns.lineplot(x='index_value', y=val_list[i], data=df1,  ax=axt[i])
-                axt[i].legend(comp_val_list)
+                sns.lineplot(x='index_value', y=val_list[i],label=str(comp_v), data=df1,  ax=axt[i])
                 axt[i].set_ylabel(val_unit_name)
                 axt[i].set_xlabel(key+'('+val_list[i]+')')
         cnt += 1
